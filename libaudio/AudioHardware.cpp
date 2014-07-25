@@ -833,20 +833,32 @@ struct pcm *AudioHardware::openPcmOut_l()
             silence_threshold : 0,
         };
 
+	    /* Test for USB and adjust */
+	    struct mixer*   mMixerAlternate = mixer_open(1);
+	    bool haveAlternateCard = (mMixerAlternate != NULL);
+	
+	    if (haveAlternateCard) {
+	        config.rate = 48000;
+	        mixer_close(mMixerAlternate);
+	    }
+
         TRACE_DRIVER_IN(DRV_PCM_OPEN)
-#if defined(USES_PCM_AUDIO) || defined(USES_SPDIF_AUDIO)
-        mPcm = pcm_open(0, 0, flags, &config);
-#elif defined(USES_I2S_AUDIO)
-        mPcm = pcm_open(0, 0, flags, &config);
-#endif
+	    ALOGV("Have alternate card: %d using %dHz rate",haveAlternateCard, config.rate);
+	    mPcm = pcm_open(haveAlternateCard ? 1 : 0, 0, flags, &config);
         TRACE_DRIVER_OUT
         if (!pcm_is_ready(mPcm)) {
-            LOGE("openPcmOut_l() cannot open pcm_out driver: %s\n", pcm_get_error(mPcm));
-            TRACE_DRIVER_IN(DRV_PCM_CLOSE)
-            pcm_close(mPcm);
-            TRACE_DRIVER_OUT
-            mPcmOpenCnt--;
-            mPcm = NULL;
+            ALOGE("openPcmOut_l() cannot open pcm_out driver: %s\n", pcm_get_error(mPcm));
+	        TRACE_DRIVER_IN(DRV_PCM_OPEN)
+		    mPcm = pcm_open(0, 0, flags, &config);
+	        TRACE_DRIVER_OUT
+	        if (!pcm_is_ready(mPcm)) {
+	            ALOGE("openPcmOut_l() cannot open pcm_out driver: %s\n", pcm_get_error(mPcm));
+	            TRACE_DRIVER_IN(DRV_PCM_CLOSE)
+	            pcm_close(mPcm);
+	            TRACE_DRIVER_OUT
+	            mPcmOpenCnt--;
+	            mPcm = NULL;
+	        }
         }
     }
     return mPcm;
